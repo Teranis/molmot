@@ -18,6 +18,8 @@ restruc_for_acdc_toggle = False # toggle for restructuring the data for ACDC
 segment_toggle = False # toggle for segmenting the images
 segm_ending = "molmot_segm.npz" # ending for the segm files
 neighborhood = skimage.morphology.disk(15) # neighborhood for otsu thresholding
+minor_axis_length_filter = 20 # upper bound filter for the minor axis length
+area_filter = 50 # lower bound filter for the area of the regions
 
 # now use Cell ACDC to track the cells (https://github.com/SchmollerLab/Cell_ACDC)
 # classic acdc tracker used (originally developed for budding yeast)
@@ -28,7 +30,7 @@ tracked_ending = "molmot_segm_tracked.npz" # ending for the tracked segm files
 filter_length = 60 # frames that the object has to be present in to be considered
 filtered_mask_ending = "molmot_segm_filtered.npz" # ending for the filtered segm files
 
-get_speed_toggle = False # toggle for getting the speed of the cells
+get_speed_toggle = False # toggle for getting the speed
 time_interval = 0.1 # time interval between frames in seconds
 pixel_size = 100/150 # pixel size in micrometers per pixel
 
@@ -64,7 +66,7 @@ def restruc_for_acdc(dir, end_name):
             os.makedirs(os.path.join(dir, folder, f"Position_{i}", f"Images"), exist_ok=True)
             os.rename(os.path.join(dir, folder, file), os.path.join(dir, folder, f"Position_{i}", f"Images", end_name))
 
-def segm_vid(img_path, neighborhood, end_name, segm_ending):
+def segm_vid(img_path, neighborhood, end_name, segm_ending, minor_axis_length_filter, area_filter):
     img = skimage.io.imread(img_path)
     img = skimage.exposure.rescale_intensity(img, out_range=(0, 1))
     img = skimage.util.img_as_ubyte(img)
@@ -86,9 +88,9 @@ def segm_vid(img_path, neighborhood, end_name, segm_ending):
 
         # filter for long, thin regions
         for region in regions:
-            if region.minor_axis_length > 20:
+            if region.minor_axis_length > minor_axis_length_filter:
                 continue
-            if region.area < 50:
+            if region.area < area_filter:
                 continue
             segm_mask[i][labels == region.label] = region.label
     
@@ -96,7 +98,7 @@ def segm_vid(img_path, neighborhood, end_name, segm_ending):
     save_path = img_path.replace(end_name, segm_ending)
     np.savez(save_path, segm_mask)
 
-def segment(root_dir, neighborhood, end_name, segm_ending):
+def segment(root_dir, neighborhood, end_name, segm_ending, minor_axis_length_filter, area_filter):
     imgs_paths = [os.path.join(root_dir, folder, subfolder, "Images", end_name) for folder in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, folder)) for subfolder in os.listdir(os.path.join(root_dir, folder)) if os.path.isdir(os.path.join(root_dir, folder, subfolder))]
     imgs_paths = [img for img in imgs_paths if img.endswith(end_name)]
     print(f"Found {len(imgs_paths)} images to process:")
@@ -105,7 +107,9 @@ def segment(root_dir, neighborhood, end_name, segm_ending):
     partial_func = functools.partial(segm_vid,
                                             neighborhood=neighborhood,
                                             end_name=end_name,
-                                            segm_ending=segm_ending)
+                                            segm_ending=segm_ending,
+                                            minor_axis_length_filter=minor_axis_length_filter,
+                                            area_filter=area_filter)
     with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
 
         futures = [executor.submit(partial_func, img_path) for img_path in imgs_paths]
@@ -419,7 +423,7 @@ if __name__ == "__main__":
     if restruc_for_acdc_toggle:
         restruc_for_acdc(dir, end_name)
     if segment_toggle:
-        segment(dir, neighborhood, end_name, segm_ending)
+        segment(dir, neighborhood, end_name, segm_ending, minor_axis_length_filter, area_filter)
     if filter_cont_tracking_toggle:
         filter_cont_tracking(dir, tracked_ending, filtered_mask_ending)
     if get_speed_toggle:
