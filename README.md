@@ -82,10 +82,10 @@ python main.py
 - **Generate boxplots:** Set `boxplot_toggle = True`.
 
 ## Output
-- **Segmented cell masks** (`.npz` files)
-- **Filtered tracking data** (`.npz` files)
-- **Speed CSV files**
-- **Plots and fitted kinetic models**
+- **Segmented cell masks** (`.npz` files, in \imgs\5\Position_0\Images)
+- **Filtered tracking data** (`.npz` files, in \imgs\5\Position_0\Images)
+- **Speed CSV files** (in \imgs)
+- **Plots and fitted kinetic models** (in \imgs)
 
 ## License
 This project is released under the MIT License.
