@@ -16,7 +16,20 @@ This project is designed for segmenting and tracking cells in time-lapse microsc
 Ensure you have Python installed (recommended version: 3.13+). You can download Python from [python.org](https://www.python.org/downloads/). Make sure to check the box for python to be added to system PATH!
 
 ### Step 2: Download files and navigate there
-Download the files form this repository and place them 
+[Download](https://github.com/Teranis/molmot/archive/refs/heads/master.zip) the files form this repository in a zip folder (or clone the repository). Unpack the folder into the desired location. Open the command prompt. Navigate to the folder into which you have extracted the data using the commands:
+
+- **Windows:**
+  ```sh
+  cd path\to\extracted\folder
+  ```
+  For example:
+    ```sh
+  cd C:\molmot-master
+  ```
+- **Mac/Linux:**
+  ```sh
+  cd path/to/extracted/folder
+  ```
 
 ### Step 3: Create a Virtual Environment
 It is recommended to create a virtual environment to manage dependencies.
@@ -53,11 +66,13 @@ pip install numpy tqdm scikit-image pandas matplotlib seaborn scipy
 
 1. Place your image files inside the `imgs/` directory.
 2. Modify the configuration parameters in the script as needed (e.g., segmentation settings, time interval, pixel size, etc.).
-3. Run the script:
+3. Open the command prompt and move to the folder where you placed the files during installation. View Step 2 of the installation guide to see how to navigate there.
+4. Run the script:
 
 ```sh
 python main.py
 ```
+5. For tracking, please use [Cell ACDC](https://github.com/SchmollerLab/Cell_ACDC). The created data structure should also allow users to easily view and edit data in Cell_ACDC.
 
 ### Optional Features
 - **Restructure data for ACDC:** Set `restruc_for_acdc_toggle = True`.
@@ -68,10 +83,9 @@ python main.py
 
 ## Output
 - **Segmented cell masks** (`.npz` files)
-- **Filtered tracking data**
+- **Filtered tracking data** (`.npz` files)
 - **Speed CSV files**
 - **Plots and fitted kinetic models**
 
 ## License
 This project is released under the MIT License.
-
