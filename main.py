@@ -13,13 +13,13 @@ MAX_WORKERS = 8
 dir = os.path.join(os.path.dirname(__file__), 'imgs')
 additional_dir = os.path.join(os.path.dirname(__file__), 'additional_imgs') # palce some additional images here for plotting if you want to have a versus comparicon
 
-# dirs = [dir, additional_dir]
-dirs = [additional_dir]
+dirs = [dir, additional_dir]
+# dirs = [additional_dir]
 # dirs = [dir]
 
 end_name = "molmot.tif" # for both data restructure and segmentation, the end name of the image files
 
-restruc_for_acdc_toggle = True # toggle for restructuring the data for ACDC
+restruc_for_acdc_toggle = False # toggle for restructuring the data for ACDC
 
 segment_toggle = False # toggle for segmenting the images
 segm_ending = "molmot_segm.npz" # ending for the segm files
@@ -40,7 +40,7 @@ get_speed_toggle = False # toggle for getting the speed
 time_interval = 0.1 # time interval between frames in seconds
 pixel_size = 100/150 # pixel size in micrometers per pixel
 
-boxplot_toggle = False # toggle for creating a boxplot of the speeds
+boxplot_toggle = True # toggle for creating a boxplot of the speeds
 th_cutoff=1.5
 
 del_files_toggle = False # toggle for deleting all npz files in a directory, for a clean start ^^
@@ -326,9 +326,18 @@ def create_plot(df: pd.DataFrame, p, unc, p_lin, unc_lin, title, save_path, df_o
     
     if df_other is not None:
         df_plot = pd.concat([df, df_other], axis=0)
-        sns.boxplot(x="ATP concentration (µM)", y="Speed µm/s", data=df_plot, linewidth=2, showcaps=True, boxprops=dict(alpha=.3), width=0.8, fliersize=0, hue="Hue")
-        sns.violinplot(x="ATP concentration (µM)", y="Speed µm/s", data=df_plot, inner=None, hue="Hue", width=0.8)
         missing_x = set(x) - set(df_other["ATP concentration (µM)"])
+
+        # filter for missing_x in df
+        df_missing = df_plot[df_plot["ATP concentration (µM)"].isin(missing_x)]
+        df_both = df_plot[~df_plot["ATP concentration (µM)"].isin(missing_x)]
+        
+        main_data_color = sns.color_palette()[0]
+        sns.boxplot(x="ATP concentration (µM)", y="Speed µm/s", data=df_missing, linewidth=2, showcaps=True, boxprops=dict(alpha=.3), width=0.8, fliersize=0, color=main_data_color)
+        sns.violinplot(x="ATP concentration (µM)", y="Speed µm/s", data=df_missing, inner=None, width=0.8, color=main_data_color)
+        sns.boxplot(x="ATP concentration (µM)", y="Speed µm/s", data=df_both, linewidth=2, showcaps=True, boxprops=dict(alpha=.3), width=0.8, fliersize=0, hue="Hue")
+        sns.violinplot(x="ATP concentration (µM)", y="Speed µm/s", data=df_both, inner=None, hue="Hue", width=0.8)
+
         n_other = [0] * len(x)
         for i, val in enumerate(x):
             if val in missing_x:
@@ -436,6 +445,8 @@ def plot(dir, additional_dir, th_cutoff):
     print_info(df_comp, "Complete Data")
     print_info(df_cut_other_dir, "Cut Data Other")
     print_info(df_comp_other_dir, "Complete Data Other")
+
+    # sns.set_context("notebook", font_scale=1.3)  # Adjust font_scale as needed
 
     # Create the plots
     title = "Speed of Actin in Relation to ATP Concentration with Outliers Removed"
