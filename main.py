@@ -331,7 +331,7 @@ def create_plot(df: pd.DataFrame, p, unc, p_lin, unc_lin, title, save_path, df_o
         # filter for missing_x in df
         df_missing = df_plot[df_plot["ATP concentration (µM)"].isin(missing_x)]
         df_both = df_plot[~df_plot["ATP concentration (µM)"].isin(missing_x)]
-        
+
         main_data_color = sns.color_palette()[0]
         sns.boxplot(x="ATP concentration (µM)", y="Speed µm/s", data=df_missing, linewidth=2, showcaps=True, boxprops=dict(alpha=.3), width=0.8, fliersize=0, color=main_data_color)
         sns.violinplot(x="ATP concentration (µM)", y="Speed µm/s", data=df_missing, inner=None, width=0.8, color=main_data_color)
@@ -403,9 +403,6 @@ def plot(dir, additional_dir, th_cutoff):
     df_comp = preprep_data(df_comp)        
     df_cut = preprep_data(df_cut)
 
-    print_info(df_cut, "Cut Data")
-    print_info(df_comp, "Complete Data")
-
     # take out the data from the other directory for fitting
     df_cut_other_dir = df_cut[df_cut["dir"] == additional_dir]
     df_cut = df_cut[df_cut["dir"] == dir]
@@ -446,7 +443,7 @@ def plot(dir, additional_dir, th_cutoff):
     print_info(df_cut_other_dir, "Cut Data Other")
     print_info(df_comp_other_dir, "Complete Data Other")
 
-    # sns.set_context("notebook", font_scale=1.3)  # Adjust font_scale as needed
+    sns.set_context("notebook", font_scale=1.2)  # Adjust font_scale as needed
 
     # Create the plots
     title = "Speed of Actin in Relation to ATP Concentration with Outliers Removed"
