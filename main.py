@@ -11,9 +11,15 @@ from scipy.optimize import curve_fit
 
 MAX_WORKERS = 8
 dir = os.path.join(os.path.dirname(__file__), 'imgs')
+additional_dir = os.path.join(os.path.dirname(__file__), 'additional_imgs') # palce some additional images here for plotting if you want to have a versus comparicon
+
+# dirs = [dir, additional_dir]
+dirs = [additional_dir]
+# dirs = [dir]
+
 end_name = "molmot.tif" # for both data restructure and segmentation, the end name of the image files
 
-restruc_for_acdc_toggle = False # toggle for restructuring the data for ACDC
+restruc_for_acdc_toggle = True # toggle for restructuring the data for ACDC
 
 segment_toggle = False # toggle for segmenting the images
 segm_ending = "molmot_segm.npz" # ending for the segm files
@@ -34,7 +40,8 @@ get_speed_toggle = False # toggle for getting the speed
 time_interval = 0.1 # time interval between frames in seconds
 pixel_size = 100/150 # pixel size in micrometers per pixel
 
-boxplot_toggle = True # toggle for creating a boxplot of the speeds
+boxplot_toggle = False # toggle for creating a boxplot of the speeds
+th_cutoff=1.5
 
 del_files_toggle = False # toggle for deleting all npz files in a directory, for a clean start ^^
 del_files_toggle_2 = False # just to make sure one doesnt delete all npz files by accident
@@ -60,7 +67,9 @@ def list_files(dir, list_end_name):
             print(os.path.join(dir, path))
 
 def restruc_for_acdc(dir, end_name):
-    for folder in os.listdir(dir):
+    folders = [folder for folder in os.listdir(dir) if os.path.isdir(os.path.join(dir, folder))]
+    folders = [folder for folder in folders if not folder.startswith(".")]
+    for folder in folders:
         tif_files = [file for file in os.listdir(os.path.join(dir, folder)) if file.endswith(".tif")]
         for i, file in enumerate(tif_files):
             os.makedirs(os.path.join(dir, folder, f"Position_{i}", f"Images"), exist_ok=True)
@@ -203,6 +212,7 @@ def get_speeds_vid(path, time_interval, pixel_size):
 def get_speeds(dir, filtered_mask_ending, time_interval, pixel_size):
     segm_paths = [os.path.join(dir, folder, subfolder, "Images", filtered_mask_ending) for folder in os.listdir(dir) if os.path.isdir(os.path.join(dir, folder)) for subfolder in os.listdir(os.path.join(dir, folder)) if os.path.isdir(os.path.join(dir, folder, subfolder))]
     segm_paths = [path for path in segm_paths if path.endswith(filtered_mask_ending)]
+    segm_paths = [path for path in segm_paths if os.path.exists(path)]
 
     print(f"Found {len(segm_paths)} files to process:")
     [print(path) for path in segm_paths]
@@ -216,83 +226,57 @@ def get_speeds(dir, filtered_mask_ending, time_interval, pixel_size):
             except Exception as e:
                 raise e
 
-def preprep_data(all_speeds):
+def preprep_data(df: pd.DataFrame):
    # Create a DataFrame for plotting
-        plot_data = pd.DataFrame([(folder, speed) for folder, speeds in all_speeds.items() for speed in speeds], columns=["ATP concentration (µM)", "Speed µm/s"])
-        plot_data["ATP concentration (µM)"] = plot_data["ATP concentration (µM)"].astype(int)
-        plot_data["Speed µm/s"] = plot_data["Speed µm/s"].astype(float)
-        plot_data = plot_data.sort_values(by="ATP concentration (µM)")
-        plot_data = plot_data.dropna()
-        plot_data = plot_data.replace([np.inf, -np.inf], np.nan).dropna()
-        plot_data = plot_data[plot_data["Speed µm/s"] > 0]
-        return plot_data
+        df = df.dropna()
+        df["ATP concentration (µM)"] = df["ATP concentration (µM)"].astype(int)
+        df["Speed µm/s"] = df["Speed µm/s"].astype(float)
+        df = df.sort_values(by="ATP concentration (µM)")
+        df = df.replace([np.inf, -np.inf], np.nan)
+        df = df.dropna()
+        df = df[df["Speed µm/s"] > 0]
+        return df
 
-def boxplot(dir, th_cutoff=1.5):
-    all_speeds_cut = {}
-    all_speeds_complete = {}
-    for folder in os.listdir(dir):
-        speeds = []
-        speeds_complete = []
-        if not os.path.isdir(os.path.join(dir, folder)):
-            continue
-
-        for subfolder in os.listdir(os.path.join(dir, folder)):
-            speeds_path = os.path.join(dir, folder, subfolder, "Images", ".speeds.csv")
-            if not os.path.exists(speeds_path):
-                continue
-
-            print(f"Processing {speeds_path}")
-            df = pd.read_csv(speeds_path, index_col="frame_i")
-            speeds_local = df.to_numpy().flatten()
-            speeds_local = speeds_local[~np.isnan(speeds_local)]
-            speeds_complete.extend(speeds_local.copy())
-            
-            lower_cutoff = np.percentile(speeds_local, 25) - th_cutoff * (np.percentile(speeds_local, 75) - np.percentile(speeds_local, 25))
-            upper_cutoff = np.percentile(speeds_local, 75) + th_cutoff * (np.percentile(speeds_local, 75) - np.percentile(speeds_local, 25))
-            speeds_local = speeds_local[(speeds_local > lower_cutoff) & (speeds_local < upper_cutoff)]
-            speeds.extend(speeds_local)
-
-            all_speeds_cut[folder] = speeds
-            all_speeds_complete[folder] = speeds_complete
-
-    plot_data = preprep_data(all_speeds_cut)
-    plot_data_complete = preprep_data(all_speeds_complete)        
-
-    def michaelis_menten(x, Km, Vmax):
-        return Vmax * x / (Km + x)
+def load_data(speeds_path, folder, dir_loc, th_cutoff, df_comp, df_cut):
+    df = pd.read_csv(speeds_path, index_col="frame_i")
+    speeds_local = df.to_numpy().flatten()
+    speeds_local = speeds_local[~np.isnan(speeds_local)]
+    df_loc = pd.DataFrame(speeds_local, columns=["Speed µm/s"])
+    df_loc["ATP concentration (µM)"] = folder
+    df_loc["dir"] = dir_loc
+    df_comp = pd.concat([df_comp, df_loc.copy()], axis=0)
     
-    def lineweaver_burk(x, a, b):
-        return a * x + b
+    lower_cutoff = np.percentile(speeds_local, 25) - th_cutoff * (np.percentile(speeds_local, 75) - np.percentile(speeds_local, 25))
+    upper_cutoff = np.percentile(speeds_local, 75) + th_cutoff * (np.percentile(speeds_local, 75) - np.percentile(speeds_local, 25))
+    speeds_local = speeds_local[(speeds_local > lower_cutoff) & (speeds_local < upper_cutoff)]
+    df_loc = pd.DataFrame(speeds_local, columns=["Speed µm/s"])
+    df_loc["ATP concentration (µM)"] = folder
+    df_loc["dir"] = dir_loc
+    df_cut = pd.concat([df_cut, df_loc], axis=0)
+    return df_comp, df_cut
 
-    # ##################
-    # fit cut dataq
-    x = np.array(plot_data["ATP concentration (µM)"])
-    y = np.array(plot_data["Speed µm/s"])
+def michaelis_menten(x, Km, Vmax):
+    return Vmax * x / (Km + x)
+def fit_mihaelis_menten(data, what):
+    x = np.array(data["ATP concentration (µM)"])
+    y = np.array(data["Speed µm/s"])
     p, cov = curve_fit(michaelis_menten, x, y,)
     unc = np.sqrt(np.diag(cov))
-    print("michaelis_menten cut data")
+    print(f"Michaelis Menten {what}")
     print(f"(Km: {p[0]:.4f} ± {unc[0]:.4f}) μM")
     print(f"(Vmax: {p[1]:.4f} ± {unc[1]:.4f}) μM/s")
+    return p, unc
 
-
-    # same for complete data
-    x = np.array(plot_data_complete["ATP concentration (µM)"])
-    y = np.array(plot_data_complete["Speed µm/s"])   
-    p_comp, cov_comp = curve_fit(michaelis_menten, x, y,)
-    unc_comp = np.sqrt(np.diag(cov_comp))
-    print("michaelis_menten complete data")
-    print(f"Km: ({p_comp[0]:.4f} ± {unc_comp[0]:.4f}) μM")
-    print(f"Vmax: ({p_comp[1]:.4f} ± {unc_comp[1]:.4f}) μM/s")
-
-    ##################
-    # Fit Lineweaver-Burk
-    x = np.array(plot_data["ATP concentration (µM)"])
-    y = np.array(plot_data["Speed µm/s"])
+def lineweaver_burk(x, a, b):
+    return a * x + b
+def fit_lineweaver_burk(data, what, p0_mm):    
+    x = np.array(data["ATP concentration (µM)"])
+    y = np.array(data["Speed µm/s"])
 
     inverse_x = 1 / x
     inverse_y = 1 / y
-    b0 = 1 / p[1]
-    a0 = p[0] * b0
+    b0 = 1 / p0_mm[1]
+    a0 = p0_mm[0] * b0
     p0 = (a0, b0)
 
     p_lin_raw, cov_lin_raw = curve_fit(lineweaver_burk, inverse_x, inverse_y, p0=p0)
@@ -304,132 +288,189 @@ def boxplot(dir, th_cutoff=1.5):
     sigma_vmax = sigma_b / b**2
     sigma_km = k_m * np.sqrt((sigma_a / a)**2 + (sigma_b / b)**2)
 
-    print("Lineweaver-Burk Fit Results:")
-    print(f"Km: ({k_m:.4f} ± {sigma_km:.4f}) ) μM")
+    print(f"Lineweaver-Burk {what}:")
+    print(f"Km: ({k_m:.4f} ± {sigma_km:.4f}) μM")
     print(f"Vmax: ({v_max:.4f} ± {sigma_vmax:.4f}) μM/s")
     p_lin = np.array([k_m, v_max])
     unc_lin = np.array([sigma_km, sigma_vmax])
+    return p_lin, unc_lin
 
+def format_txt_save(p, unc):
+    return f"Km: ({p[0]} ± {unc[0]}) 1e-6 M\nVmax: ({p[1]} ± {unc[1]}) 1e-6 M/s"
 
-    # Fit Lineweaver-Burk complete data
-    x = np.array(plot_data_complete["ATP concentration (µM)"])
-    y = np.array(plot_data_complete["Speed µm/s"])
+def print_info(df:pd.DataFrame, title):
+    print()
+    print(title)
+    print(df["Speed µm/s"].describe())
+    print(f"min: {df["Speed µm/s"].min()}")
+    print()
+    print(df["ATP concentration (µM)"].value_counts())
+    print("\n")
+    print(df.head())
+    print("\n")
 
-    inverse_x = 1 / x
-    inverse_y = 1 / y
-    b0 = 1 / p_comp[1]
-    a0 = p_comp[0] * b0
-    p0 = (a0, b0)
-
-    p_lin_raw, cov_lin_raw = curve_fit(lineweaver_burk, inverse_x, inverse_y, p0=p0)
-
-    a, b = p_lin_raw 
-    sigma_a, sigma_b = np.sqrt(np.diag(cov_lin_raw))
-    v_max = 1 / b
-    k_m = a / b
-
-    sigma_vmax = sigma_b / b**2
-    sigma_km = k_m * np.sqrt((sigma_a / a)**2 + (sigma_b / b)**2)
-
-    print("Lineweaver-Burk Fit Results:")
-    print(f"Km: ({k_m:.4f} ± {sigma_km:.4f}) μM")
-    print(f"Vmax: ({v_max:.4f} ± {sigma_vmax:.4f}) μM/s ")
-    p_lin_comp = np.array([k_m, v_max])
-    unc_lin_comp = np.array([sigma_km, sigma_vmax])
-
-    # save the data
-    plot_data.to_csv(os.path.join(dir, "plot_data.csv"))
-    plot_data_complete.to_csv(os.path.join(dir, "plot_data_complete.csv"))
-
-    # save the fit information
-    with open(os.path.join(dir, "fit.txt"), "w") as f:
-        f.write(f"Michaelis-Menten Cut Data\n")
-        f.write(f"Km: ({p[0]} ± {unc[0]}) 1e-6 M\n")
-        f.write(f"Vmax: ({p[1]} ± {unc[1]}) 1e-6 M/s\n\n")
-
-        f.write(f"Michaelis-Menten Complete Data\n")
-        f.write(f"Km: ({p_comp[0]} ± {unc_comp[0]}) 1e-6 M\n")
-        f.write(f"Vmax: ({p_comp[1]} ± {unc_comp[1]}) 1e-6 M/s\n\n")
-
-        f.write(f"Lineweaver-Burk Cut Data\n")
-        f.write(f"Km: ({p_lin[0]} ± {unc_lin[0]}) 1e-6 M\n")
-        f.write(f"Vmax: ({p_lin[1]} ± {unc_lin[1]}) 1e-6 M/s\n\n")
-
-        f.write(f"Lineweaver-Burk Complete Data\n")
-        f.write(f"Km: ({p_lin_comp[0]} ± {unc_lin_comp[0]}) 1e-6 M\n")
-        f.write(f"Vmax: ({p_lin_comp[1]} ± {unc_lin_comp[1]}) 1e-6 M/s\n")
-    
-    # Create the plot
+def create_plot(df: pd.DataFrame, p, unc, p_lin, unc_lin, title, save_path, df_other=None):
     plt.figure(figsize=(12, 8))
-    sns.boxplot(x="ATP concentration (µM)", y="Speed µm/s", data=plot_data, linewidth = 2, showcaps = True, boxprops=dict(alpha=.3), width = 0.4, fliersize=0)
-    sns.violinplot(x="ATP concentration (µM)", y="Speed µm/s", data=plot_data, inner=None, color=".8")#, alpha=0.6)
+    if df_other is not None:
+        df_other["Hue"] = "Other Data"
+        df["Hue"] = "Main Data"
 
-     # plot the fit
-    ATP_concentrations = plot_data["ATP concentration (µM)"]
+    label = f"Fit: Km = ({p[0]:.4f} pm {unc[0]:.4f}) μM, Vmax = ({p[1]:.4f} pm {unc[1]:.4f}) μM/s"
+    lin_label = f"Linearized fit: Km = ({p_lin[0]:.4f} pm {unc_lin[1]:.4f}) μM, Vmax = ({p_lin[1]:.4f} pm {unc_lin[1]:.4f}) μM/s"
+
+    ATP_concentrations = df["ATP concentration (µM)"]
     x = np.unique(np.array(ATP_concentrations))
     x_plot = np.arange(len(x))
+    n = df.groupby("ATP concentration (µM)").size()
+
+    
+    if df_other is not None:
+        df_plot = pd.concat([df, df_other], axis=0)
+        sns.boxplot(x="ATP concentration (µM)", y="Speed µm/s", data=df_plot, linewidth=2, showcaps=True, boxprops=dict(alpha=.3), width=0.8, fliersize=0, hue="Hue")
+        sns.violinplot(x="ATP concentration (µM)", y="Speed µm/s", data=df_plot, inner=None, hue="Hue", width=0.8)
+        missing_x = set(x) - set(df_other["ATP concentration (µM)"])
+        n_other = [0] * len(x)
+        for i, val in enumerate(x):
+            if val in missing_x:
+                n_other[i] = 0
+            else:
+                n_other[i] = df_other[df_other["ATP concentration (µM)"] == val].shape[0]
+
+        for i, txt in enumerate(zip(n, n_other)):
+            plt.annotate(f"n = {txt[0]}\nn other = {txt[1]}", (i, 0), xytext=(0, -30), textcoords="offset points", ha='center', va='bottom')        
+
+    else:
+        sns.boxplot(x="ATP concentration (µM)", y="Speed µm/s", data=df, linewidth = 2, showcaps = True, boxprops=dict(alpha=.3), width = 0.4, fliersize=0)
+        sns.violinplot(x="ATP concentration (µM)", y="Speed µm/s", data=df, inner=None, color=".8")
+        for i, txt in enumerate(n):
+            plt.annotate(f"n = {txt}", (i,0), xytext=(0, -20), textcoords="offset points", ha='center', va='bottom')
+    
+    # plot the fit
     y_fit  = michaelis_menten(x, *p)
     y_upper = michaelis_menten(x, p[0] + unc[0], p[1] + unc[1])
     y_lower = michaelis_menten(x, p[0] - unc[0], p[1] - unc[1])
-    plt.plot(x_plot, y_fit, color="black", linestyle="--", label=f"Fit: Km = ({p[0]:.4f} pm {unc[0]:.4f}) μM, Vmax = ({p[1]:.4f} pm {unc[1]:.4f}) μM/s")
+    plt.plot(x_plot, y_fit, color="black", linestyle="--", label=label)
     plt.fill_between(x_plot, y_upper, y_lower, color="black", alpha=0.2)
 
     # also plot lb fit
     y_fit  = michaelis_menten(x, *p_lin)
     y_upper = michaelis_menten(x, p_lin[0] + unc_lin[0], p_lin[1] + unc_lin[1])
     y_lower = michaelis_menten(x, p_lin[0] - unc_lin[0], p_lin[1] - unc_lin[1])
-    plt.plot(x_plot, y_fit, color="blue", linestyle="--", label=f"Linearized fit: Km = ({p_lin[0]:.4f} pm {unc_lin[1]:.4f}) μM, Vmax = ({p_lin[1]:.4f} pm {unc_lin[1]:.4f}) μM/s")
+    plt.plot(x_plot, y_fit, color="blue", linestyle="--", label=lin_label)
     plt.fill_between(x_plot, y_upper, y_lower, color="blue", alpha=0.2)
 
-    # add n to the plot
-    n = plot_data.groupby("ATP concentration (µM)").size()
-    for i, txt in enumerate(n):
-        plt.annotate(f"n = {txt}", (i, 0), xytext=(0, -20), textcoords="offset points", ha='center', va='bottom')
-
-    plt.legend()
-    plt.title("Speed of Actin in Relation to ATP Concentration with Outliers Removed")
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys())
+    plt.title(title)
     plt.xticks(rotation=45)
-    plt.savefig(os.path.join(dir, "speeds.png"), dpi=300)
+    bottom_lim = plt.ylim()[0]
+    if df_other is not None:
+        bottom_lim = bottom_lim - abs(bottom_lim) * 0.2
+    plt.ylim(bottom= bottom_lim)
+    plt.savefig(save_path, dpi=300)
+    plt.close()
 
-    ####################################
-    plt.figure(figsize=(12, 8))
-    sns.boxplot(x="ATP concentration (µM)", y="Speed µm/s", data=plot_data_complete, linewidth = 2, showcaps = True, boxprops=dict(alpha=.3), width = 0.4, fliersize=0)
-    sns.violinplot(x="ATP concentration (µM)", y="Speed µm/s", data=plot_data_complete, inner=None, color=".8")#, alpha=0.6)
+def plot(dir, additional_dir, th_cutoff):
+    folders = [dir]
+    if additional_dir is not None:
+        folders.append(additional_dir)
+    
+    df_comp = pd.DataFrame()
+    df_cut = pd.DataFrame()
+    for dir_loc in folders:
+        for folder in os.listdir(dir_loc):
+            if not os.path.isdir(os.path.join(dir_loc, folder)):
+                continue
 
-    # plot the fit
-    y_fit = michaelis_menten(x, *p_comp)
-    y_upper = michaelis_menten(x, p_comp[0] + unc_comp[0], p_comp[1] + unc_comp[1])
-    y_lower = michaelis_menten(x, p_comp[0] - unc_comp[0], p_comp[1] - unc_comp[1])
-    plt.plot(x_plot, y_fit, color="black", linestyle="--", label=f"Fit: Km = ({p_comp[0]:.4f} pm {unc_comp[1]:.4f}) μM, Vmax = ({p_comp[1]:.4f} pm {unc_comp[1]:.4f}) μM/s")
-    plt.fill_between(x_plot, y_upper, y_lower, color="black", alpha=0.2)
+            for subfolder in os.listdir(os.path.join(dir_loc, folder)):
+                speeds_path = os.path.join(dir_loc, folder, subfolder, "Images", ".speeds.csv")
+                if not os.path.exists(speeds_path):
+                    continue
 
-    # also plot lb fit
-    y_fit = michaelis_menten(x, *p_lin_comp)
-    y_upper = michaelis_menten(x, p_lin_comp[0] + unc_lin_comp[0], p_lin_comp[1] + unc_lin_comp[1])
-    y_lower = michaelis_menten(x, p_lin_comp[0] - unc_lin_comp[0], p_lin_comp[1] - unc_lin_comp[1])
-    plt.plot(x_plot, y_fit, color="blue", linestyle="--", label=f"Linearized fit: Km = ({p_lin_comp[0]:.4f} pm {unc_lin_comp[1]:.4f}) μM, Vmax = ({p_lin_comp[1]:.4f} pm {unc_lin_comp[1]:.4f}) μM/s")
-    plt.fill_between(x_plot, y_upper, y_lower, color="blue", alpha=0.2)
+                print(f"Processing {speeds_path}")
+                df_comp, df_cut = load_data(speeds_path, folder, dir_loc, th_cutoff, df_comp, df_cut)
 
-    n = plot_data_complete.groupby("ATP concentration (µM)").size()
-    for i, txt in enumerate(n):
-        plt.annotate(f"n = {txt}", (i, 0), xytext=(0, -20), textcoords="offset points", ha='center', va='bottom')
+    df_comp = preprep_data(df_comp)        
+    df_cut = preprep_data(df_cut)
 
-    plt.legend()
-    plt.title("Speed of Actin in Relation to ATP Concentration with Outliers")
-    plt.xticks(rotation=45)
-    plt.savefig(os.path.join(dir, "speeds_complete.png"), dpi=300)
+    print_info(df_cut, "Cut Data")
+    print_info(df_comp, "Complete Data")
+
+    # take out the data from the other directory for fitting
+    df_cut_other_dir = df_cut[df_cut["dir"] == additional_dir]
+    df_cut = df_cut[df_cut["dir"] == dir]
+
+    df_comp_other_dir = df_comp[df_comp["dir"] == additional_dir]
+    df_comp = df_comp[df_comp["dir"] == dir]
+
+    # ##################
+    # fit mihaelis_menten
+    p_cut, unc_cut = fit_mihaelis_menten(df_cut, "cut data")
+    p_comp, unc_comp = fit_mihaelis_menten(df_comp, "complete data")
+
+    ##################
+    # Fit Lineweaver-Burk
+    p_lin_cut, unc_lin_cut = fit_lineweaver_burk(df_cut, "cut data", p_cut)
+    p_lin_comp, unc_lin_comp = fit_lineweaver_burk(df_comp, "complete data", p_comp)
+
+    # save the data
+    df_cut.to_csv(os.path.join(dir, "df_cut.csv"))
+    df_comp.to_csv(os.path.join(dir, "df_comp.csv"))
+
+    # save the fit information
+    with open(os.path.join(dir, "fit.txt"), "w") as f:
+        f.write(f"Michaelis-Menten Cut Data\n")
+        f.write(format_txt_save(p_cut, unc_cut))
+
+        f.write(f"\n\nMichaelis-Menten Complete Data\n")
+        f.write(format_txt_save(p_comp, unc_comp))
+
+        f.write(f"\n\nLineweaver-Burk Cut Data\n")
+        f.write(format_txt_save(p_lin_cut, unc_lin_cut))
+
+        f.write(f"\n\nLineweaver-Burk Complete Data\n")
+        f.write(format_txt_save(p_lin_comp, unc_lin_comp))
+    
+    print_info(df_cut, "Cut Data")
+    print_info(df_comp, "Complete Data")
+    print_info(df_cut_other_dir, "Cut Data Other")
+    print_info(df_comp_other_dir, "Complete Data Other")
+
+    # Create the plots
+    title = "Speed of Actin in Relation to ATP Concentration with Outliers Removed"
+    save_name = "speeds_cut_other.png"
+    save_path = os.path.join(dir, save_name)
+    create_plot(df_cut, p_cut, unc_cut, p_lin_cut, unc_lin_cut, title, save_path, df_other=df_cut_other_dir)
+
+    save_name = "speeds_cut.png"
+    save_path = os.path.join(dir, save_name)
+    create_plot(df_cut, p_cut, unc_cut, p_lin_cut, unc_lin_cut, title, save_path)
+
+    title = "Speed of Actin in Relation to ATP Concentration without Outliers Removed"
+    save_name = "speeds_comp_other.png"
+    save_path = os.path.join(dir, save_name)
+    create_plot(df_comp, p_comp, unc_comp, p_lin_comp, unc_lin_comp, title, save_path, df_other=df_comp_other_dir)
+
+    save_name = "speeds_comp.png"
+    save_path = os.path.join(dir, save_name)
+    create_plot(df_comp, p_comp, unc_comp, p_lin_comp, unc_lin_comp, title, save_path)
 
 if __name__ == "__main__":
     if restruc_for_acdc_toggle:
-        restruc_for_acdc(dir, end_name)
+        for dir in dirs:
+            restruc_for_acdc(dir, end_name)
     if segment_toggle:
-        segment(dir, neighborhood, end_name, segm_ending, minor_axis_length_filter, area_filter)
+        for dir in dirs:
+            segment(dir, neighborhood, end_name, segm_ending, minor_axis_length_filter, area_filter)
     if filter_cont_tracking_toggle:
-        filter_cont_tracking(dir, tracked_ending, filtered_mask_ending)
+        for dir in dirs:
+            filter_cont_tracking(dir, tracked_ending, filtered_mask_ending)
     if get_speed_toggle:
-        get_speeds(dir, filtered_mask_ending, time_interval, pixel_size)
+        for dir in dirs:
+            get_speeds(dir, filtered_mask_ending, time_interval, pixel_size)
     if boxplot_toggle:
-        boxplot(dir)
+        plot(dir, additional_dir, th_cutoff)
     if del_files_toggle and del_files_toggle_2:
         del_files(dir, del_end)
     if list_files_toggle:
