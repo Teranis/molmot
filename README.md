@@ -4,10 +4,10 @@ This project is designed for segmenting and tracking cells in time-lapse microsc
 
 ## Features
 - **Image Preprocessing**: Rescales intensity and applies Gaussian filtering.
-- **Cell Segmentation**: Uses Otsu thresholding and region filtering.
-- **Cell Tracking**: Integrates with [Cell ACDC](https://github.com/SchmollerLab/Cell_ACDC) for object tracking.
+- **Segmentation**: Uses Otsu thresholding and region filtering.
+- **Tracking**: Integrates with [Cell ACDC](https://github.com/SchmollerLab/Cell_ACDC) for object tracking.
 - **Filtering**: Removes objects not present for a minimum number of frames.
-- **Speed Calculation**: Computes cell movement speeds over time.
+- **Speed Calculation**: Computes movement speeds over time.
 - **Data Visualization**: Generates boxplots and fits Michaelis-Menten kinetics.
 
 ## Installation Guide
@@ -64,8 +64,8 @@ pip install numpy tqdm scikit-image pandas matplotlib seaborn scipy
 
 ## Usage Guide
 
-1. Place your image files inside the `imgs/` directory.
-2. Modify the configuration parameters in the script as needed (e.g., segmentation settings, time interval, pixel size, etc.).
+1. Place your image files inside the `imgs/` or `additional_imgs/` directory.
+2. !Modify the configuration parameters in the script as needed (e.g., segmentation settings, time interval, pixel size, etc.)!.
 3. Open the command prompt and move to the folder where you placed the files during installation. View Step 2 of the installation guide to see how to navigate there.
 4. Run the script:
 
@@ -75,17 +75,17 @@ python main.py
 5. For tracking, please use [Cell ACDC](https://github.com/SchmollerLab/Cell_ACDC). The created data structure should also allow users to easily view and edit data in Cell_ACDC.
 
 ### Optional Features
-- **Restructure data for ACDC:** Set `restruc_for_acdc_toggle = True`.
-- **Segment images:** Set `segment_toggle = True`.
-- **Filter tracked IDs:** Set `filter_cont_tracking_toggle = True`.
-- **Calculate cell speeds:** Set `get_speed_toggle = True`.
-- **Generate boxplots:** Set `boxplot_toggle = True`.
+- **Restructure data for ACDC:** Set `restruc_for_acdc_toggle = True`. The input should be in `imgs`/`additional_imgs`, with tif files in folders. These folders should have the conc. of ATP as their name.
+- **Segment images:** Set `segment_toggle = True`. Segments the tif files using some preprocessing and otsu adaptive thresholding.
+- **Filter tracked IDs:** Set `filter_cont_tracking_toggle = True`. Filters for IDs which have been tracked for a certain number of frames.
+- **Calculate speeds:** Set `get_speed_toggle = True`. Gets the speeds of the tracked objects based on their centroids.
+- **Generate boxplots:** Set `boxplot_toggle = True`. Creates plots (violin and box plot)
 
 ## Output
-- **Segmented cell masks** (`.npz` files, in \imgs\5\Position_0\Images)
-- **Filtered tracking data** (`.npz` files, in \imgs\5\Position_0\Images)
-- **Speed CSV files** (in \imgs)
-- **Plots and fitted kinetic models** (in \imgs)
+- **Segmented cell masks** (`.npz` files, in `\imgs\5\Position_0\Images`)
+- **Filtered tracking data** (`.npz` files, in `\imgs\5\Position_0\Images`)
+- **Speed CSV files** (in `\imgs`)
+- **Plots and fitted kinetic models** (in `\imgs`)
 
 ## License
 This project is released under the MIT License.
