@@ -346,13 +346,13 @@ def create_plot(df: pd.DataFrame, p, unc, p_lin, unc_lin, title, save_path, df_o
                 n_other[i] = df_other[df_other["ATP concentration (µM)"] == val].shape[0]
 
         for i, txt in enumerate(zip(n, n_other)):
-            plt.annotate(f"n = {txt[0]}\nn other = {txt[1]}", (i, 0), xytext=(0, -30), textcoords="offset points", ha='center', va='bottom')        
+            plt.annotate(f"n = {txt[0]}\nn other = {txt[1]}", (i, 0), xytext=(0, -15), textcoords="offset points", ha='center', va='top')        
 
     else:
         sns.boxplot(x="ATP concentration (µM)", y="Speed µm/s", data=df, linewidth = 2, showcaps = True, boxprops=dict(alpha=.3), width = 0.4, fliersize=0)
         sns.violinplot(x="ATP concentration (µM)", y="Speed µm/s", data=df, inner=None, color=".8")
         for i, txt in enumerate(n):
-            plt.annotate(f"n = {txt}", (i,0), xytext=(0, -20), textcoords="offset points", ha='center', va='bottom')
+            plt.annotate(f"n = {txt}", (i,0), xytext=(0, -10), textcoords="offset points", ha='center', va='top')
     
     # plot the fit
     y_fit  = michaelis_menten(x, *p)
@@ -373,10 +373,11 @@ def create_plot(df: pd.DataFrame, p, unc, p_lin, unc_lin, title, save_path, df_o
     plt.legend(by_label.values(), by_label.keys())
     plt.title(title)
     plt.xticks(rotation=45)
-    bottom_lim = plt.ylim()[0]
+    lims = plt.ylim()
+    bottom = lims[0]
     if df_other is not None:
-        bottom_lim = bottom_lim - abs(bottom_lim) * 0.2
-    plt.ylim(bottom= bottom_lim)
+        bottom = lims[0] - 0.1* (lims[1] - lims[0])
+    plt.ylim(bottom= bottom)
     plt.savefig(save_path, dpi=300)
     plt.close()
 
